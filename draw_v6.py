@@ -304,8 +304,8 @@ def main():
            font=SANS_B(14), fill=WHITE)
 
     briefs = [
-        ("Cairo fuel-tanker fire kills 31", "feature-cairo.png"),
-        ("Sudan RSF drone strikes kill 19", "mini-sudan.png"),
+        ("Cairo fuel-tanker fire kills 31, injures 21", "feature-cairo.png"),
+        ("Sudan RSF drone strikes kill 19, wounds 20", "mini-sudan.png"),
         ("Israel kills Hamas colonel Abuelouf in Gaza", "mini-abuelouf.png"),
         ("UK energy cap to rise 26% to £2,166", "feature-energy.png"),
         ("Bangladesh garment wage up 36% to $139", "mini-bangladesh.png"),
