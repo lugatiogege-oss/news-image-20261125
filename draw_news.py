@@ -1,34 +1,41 @@
 #!/usr/bin/env python3
-"""Draw the 25 November 2026 world-news front page, v5 (800x1024 PNG).
+"""Draw the 25 November 2026 world-news front page, v5 (1024x1024 PNG).
 
-TOTAL REDESIGN (v5) of the make.fun news-image entry.
+TOTAL REDESIGN (v5) of the make.fun news-image entry, second build:
+21 stories on a SQUARE 1024x1024 canvas (the maximum allowed area;
+entry.png must stay <= 1 MiB and <= 1024x1024).
 
-Design (from v5-design-brief.md): one dominant lead (Hormuz), two large
-secondary (Shenzhou-24, US tariffs), six medium secondary, news briefs with
-REAL mini illustrations, dotted/pale world map with numbered pins, red
-DATE CHECK footer. Warm ivory paper, six-column grid, 12px gutters,
-~28px side margins. Serif headlines (DejaVu Serif Bold), sans body
-(DejaVu Sans). Four type sizes only: 34 / 28 / 22 / 18. All text >= 18px.
-Every story in its own hairline-bordered box with >= 12px internal
-padding. No text outside its box, no text touching a border, no
-illustration covering text.
+Design (from v5-design-brief.md, as amended by the layout-fix task):
+one dominant lead (Hormuz), two large secondary (Shenzhou-24, US
+tariffs), six medium secondary, news briefs HEADLINE-ONLY at 16px
+(briefs only -- everything else >= 18px). Warm ivory paper,
+six-column grid, 12px gutters, ~28px side margins. Serif headlines
+(DejaVu Serif Bold), sans body (DejaVu Sans). Every feature story in
+its own hairline-bordered box with >= 12px internal padding; briefs
+are an open 3-column grid (mini illustration + headline, hairline
+between rows) so a row costs ~34px. No text outside its box, no text
+touching a border, no illustration covering text.
 
-SPACE NOTE (measured, 2026-11-26): at 800x1024 with >= 18px text and the
-researcher's FULL summaries, the canvas cannot hold all 25 stories with
-real whitespace -- the full 25-story build needs 3184px of height against
-1012px available, and even the 9-feature core (3 leads + 6 medium, no
-briefs, no map) overflows by 439px with full art/metas, and by 119px in
-its most stripped form (no metas, no medium art/kickers, no region bar,
-single-line stats, short footer). The brief's own rule applies: CUT
-BEFORE SHRINKING. This build therefore shows 6 stories -- all 3 leads
-plus medium S1/S2/S4 (best regional breadth: Middle East, Latin America,
-Africa; Kospi -6.2% and US GDP 4.3% survive in the stat strip) -- with
-full summaries, real art, the complete header and the DATE CHECK footer.
-Cut: medium S3/S5/S6, all 16 briefs (cut order B16, B11, B15, B14, B9,
-B13, B6, B12, then the rest) and the world map. Per-story source lines
-are omitted (the footer credits Reuters, AP, AFP, Al Jazeera, WSJ, CNN).
-CONFIG below records what is shown; the script prints the exact height
-budget and refuses to render overflowing.
+SPACE NOTE (measured, 2026-11-26): at 1024x1024 the full 25 stories
+do NOT fit with the brief's own rules intact. The honest budget
+(header 140 + lead 142 + secondary 183 + medium 255 + briefs 184 +
+footer 92 = 996 of 1004 available) holds 21 stories = 3 leads +
+6 medium + 12 briefs, with 8px slack. The binding constraint is the
+medium row: band 36 + 2-line headline + 1-line summary + padding =
+119px/row. Keeping medium kickers as well costs +25px/row (+50 total);
+even with every other tightening (band 28, lead 200x100 2:1 crop,
+stats 22px cells, shaved masthead leading) 21 stories WITH kickers
+is still ~5px over -- i.e. 21-with-kickers genuinely does not fit
+cleanly, so medium kickers are dropped (region/category also
+absent from briefs by design; it survives in the three lead
+kickers). The map is dropped too: it needs ~81px and only 8px
+slack remains. Briefs cut in the brief's order: B16, B11, B15,
+B14 (weakest sourcing first). Cut briefs are NOT shown anywhere
+else on the page. Never cut a LEAD or SECONDARY.
+Per-story source lines are omitted (the footer credits Reuters,
+AP, AFP, Al Jazeera, WSJ, CNN). CONFIG below records what is shown;
+the script prints the exact height budget and refuses to render
+overflowing.
 
 Deterministic: fixed fonts, fixed geometry, fixed image assets, fixed
 grain seed, no timestamps, no network. Running this script twice
@@ -41,13 +48,14 @@ import random
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-W, H = 800, 1024
+W, H = 1024, 1024
 MX = 28                      # side margins
 TOP, BOT = 10, 10
-CW = W - 2 * MX              # 744, content width
+CW = W - 2 * MX              # 968, content width
 GAP = 12                     # gutter between boxes
-SEC = 6                      # gap between sections
+SEC = 5                      # gap between sections
 PAD = 12                     # internal box padding
+FPAD = 8                     # footer internal padding
 
 PAPER = (247, 242, 230)      # warm ivory / cream paper
 INK = (18, 18, 18)           # near-black ink
@@ -70,11 +78,12 @@ SERIF_I = os.path.join(FONT_DIR, "DejaVuSerif-Italic.ttf")
 SANS_B = os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
 SANS = os.path.join(FONT_DIR, "DejaVuSans.ttf")
 
-# --- type sizes: 34 / 28 / 22 / 18 only -------------------------------
-SZ_DATE, SZ_MAST, SZ_LEAD, SZ_BODY = 34, 28, 22, 18
+# --- type sizes: 34 / 28 / 22 / 18, plus 16 for BRIEFS ONLY -----------
+SZ_DATE, SZ_MAST, SZ_LEAD, SZ_BODY, SZ_BRIEF = 34, 28, 22, 18, 16
 # leading per size
 LD = {34: 38, 28: 32, 22: 25, 18: 21}     # headlines / kickers
 LD_BODY = 19                              # 18px body summaries
+LD_BRIEF = 17                             # 16px brief headlines (2 lines = 34)
 
 
 def font(path, size):
@@ -141,15 +150,11 @@ def art(name, tw, th):
 
 # ---------------------------------------------------------------- data ---
 
-REGIONS = [
-    ("MIDDLE EAST", BURG), ("ASIA", AMBER), ("EUROPE", NAVY),
-    ("AMERICAS", TEAL), ("AFRICA", BROWN), ("OCEANIA", BLUE),
-]
-
-# 6 verified stats: (number, label) -- two-line cells
+# 6 verified stats: (number, label) -- single-line cells. "CAP" (not
+# "UK CAP"): "£2,166 UK CAP" is 151px in an 151.3px cell -- no margin.
 STATS = [
     ("2", "TANKERS"), ("-6.2%", "KOSPI"), ("31", "KILLED"),
-    ("4.3%", "US GDP"), ("$94.61", "BRENT"), ("\u00a32,166", "UK CAP"),
+    ("4.3%", "US GDP"), ("$94.61", "BRENT"), ("\u00a32,166", "CAP"),
 ]
 
 # Stories: (tag, asset, kicker, headline, summary, meta, lon, lat)
@@ -212,6 +217,7 @@ MEDIUM = [
 
 # Briefs in display order B1..B16. CUT_ORDER is the brief's cut order;
 # CONFIG["briefs"] lists the tags actually shown (subset, in order).
+# Briefs are HEADLINE-ONLY on the page (16px, no summary/meta/kicker).
 BRIEFS = [
     ("B1", "mini-sudan.png", "AFRICA \u00b7 CONFLICT",
      "Sudan RSF drone strikes kill 19",
@@ -296,33 +302,45 @@ BRIEFS = [
      "European Commission (Strasbourg)", 7.8, 48.6),
 ]
 
-# Brief cut order from the brief (first = cut first). Remaining briefs
-# are cut weakest-first if still over budget.
+# Brief cut order from the brief (first = cut first).
 CUT_ORDER = ["B16", "B11", "B15", "B14", "B9", "B13", "B6", "B12",
              "B10", "B8", "B7", "B5", "B4", "B3", "B2", "B1"]
 
-# ---- CONFIG: what this build shows (tuned to fit 800x1024 cleanly) ---
+# ---- CONFIG: what this build shows (21 stories, measured to fit) -----
 CONFIG = {
-    "region_bar": True,     # colour-coded region bar under the subhead
-    "stat_two_line": True,  # stat strip: number over label (else 1 line)
-    "lead_image_w": 200,    # lead image width (3:2)
-    "sec_band": 36,         # secondary image band height
-    "med_band": 28,         # medium image band height (0 = no image)
-    "med_kicker": True,     # medium stories show kicker line
+    "region_bar": False,    # separate region bar dropped; regions live
+                            # in the three lead kickers (header <= 180px)
+    "stat_two_line": False, # stat strip: single line "NUM LABEL"
+    "lead_image_w": 170,    # lead image 170x113 (native 3:2, no crop)
+    "sec_band": 32,         # secondary image band height
+    "med_band": 36,         # medium image band height
+    "med_kicker": False,    # medium kickers dropped (see SPACE NOTE:
+                            # 21 stories WITH kickers is ~5px over even
+                            # fully tightened; summaries carry more
+                            # information than the kicker line)
     "show_meta": False,     # per-story source line (footer credits sources)
-    "footer_short": True,   # compressed DATE CHECK wording
-    "show_map": False,      # WHERE IT HAPPENED map (cut for space)
-    "medium": ["S1", "S2", "S4"],  # medium tags shown (see note above)
-    "briefs": [],           # brief tags shown, in display order
+    "footer_short": True,   # compressed DATE CHECK wording, 4 lines
+    "show_map": False,      # WHERE IT HAPPENED map (needs ~81px,
+                            # only ~8px slack -- stories come first)
+    "medium": ["S1", "S2", "S3", "S4", "S5", "S6"],
+    # briefs shown (12): cut B16, B11, B15, B14 in the brief's order
+    "briefs": ["B1", "B2", "B3", "B4", "B5", "B6",
+               "B7", "B8", "B9", "B10", "B12", "B13"],
 }
 
+# DATE CHECK footer: 4 physical lines at 18px in a 952px inner width.
+# Line 1 (red bold) wraps to two lines with full descriptors and short
+# date forms; line 2 names all six ALSO items with descriptors on ONE
+# line (comma separators -- the "·" version spills by one word) and
+# keeps only the outlier date (30 Oct); line 3 is the source credits.
+# The per-item Mon 23 / Tue 24 dates on line 2 were dropped to hold
+# 4 lines; the box title ("NOT 25 NOV") still states the point.
 FOOTER_LINES_SHORT = [
     ("NOT 25 NOV \u2014 LEFT OUT: Huawei verdict (Tue 24) \u00b7 Riyadh "
-     "strike, 11 hurt (Tue 24) \u00b7 COP31 no deal (Sun 22) \u00b7 "
+     "tower strike, 11 hurt (Tue 24) \u00b7 COP31 no deal (Sun 22) \u00b7 "
      "Kr\u00e1kow shooting (Sat 7)", RED),
-    ("ALSO: Odesa/Kyiv \u00b7 CIA+ODNI \u00b7 Novaya Gazeta \u00b7 Huang "
-     "apology \u00b7 Ahmadi flogging \u00b7 Korea AI-cheater reward "
-     "(23\u201324 Nov; Novaya Gazeta 30 Oct)", INK),
+    ("ALSO: Odesa/Kyiv, CIA+ODNI, Huang apology, Ahmadi flogging, "
+     "Korea AI reward, Novaya Gazeta (30 Oct)", INK),
     ("Sources: Reuters, AP, AFP, Al Jazeera, WSJ, CNN", GREY),
 ]
 
@@ -407,66 +425,48 @@ class Layout:
         d.text(((W - d.textlength(txt, font=fnt)) / 2, self.y + 1),
                txt, font=fnt, fill=PAPER)
         self.note("banner", 20)
-        self.y += 20 + 4
+        self.y += 20 + 2
 
     def masthead(self):
+        # Tightened advances (masthead 28px / date 34px / subhead 18px):
+        # 30 + 36 + 23 = 89. No descenders on the all-caps masthead line;
+        # the date's 'y' descender clears the subhead by 2px.
         d = self.d
         fnt = self.f(SERIF_B, SZ_MAST)
         txt = "THE WORLD IN ONE DAY"
         d.text(((W - d.textlength(txt, font=fnt)) / 2, self.y),
                txt, font=fnt, fill=INK)
-        self.y += LD[SZ_MAST] + 2
+        self.y += 30
         fnt = self.f(SERIF_B, SZ_DATE)
         txt = "Wednesday, 25 November 2026"
         d.text(((W - d.textlength(txt, font=fnt)) / 2, self.y),
                txt, font=fnt, fill=INK)
-        self.y += LD[SZ_DATE] + 2
+        self.y += 36
         fnt = self.f(SERIF_I, SZ_BODY)
         txt = ("Hormuz tankers mined \u00b7 Shenzhou-24 docks "
                "\u00b7 US tariffs on 14 economies")
         d.text(((W - d.textlength(txt, font=fnt)) / 2, self.y),
                txt, font=fnt, fill=BURG)
-        self.y += LD[SZ_BODY] + 4
-        self.note("masthead+date+subhead", self.y - TOP - 24)
-
-    def region_bar(self):
-        if not self.cfg["region_bar"]:
-            return
-        d = self.d
-        fnt = self.f(SANS_B, SZ_BODY)
-        parts, total = [], 0
-        for name, col in REGIONS:
-            w = d.textlength(name, font=fnt) + 20
-            parts.append((name, col, w))
-            total += w
-        total += 24 * (len(parts) - 1)
-        x = (W - total) / 2
-        for name, col, w in parts:
-            d.rectangle([x + 2, self.y + 3, x + 14, self.y + 15], fill=col)
-            d.text((x + 18, self.y), name, font=fnt, fill=INK)
-            x += w + 24
-        self.note("region bar", LD[SZ_BODY])
-        self.y += LD[SZ_BODY] + 4
+        self.y += LD[SZ_BODY] - 2 + 4
+        self.note("masthead+date+subhead", 89)
 
     def stat_strip(self):
+        # Single-line cells: "NUM LABEL", number navy, label grey,
+        # both bold 18px. Cell height 24 (3px slack top and bottom).
         d = self.d
-        two = self.cfg["stat_two_line"]
         cell_w = (CW - 5 * GAP) / 6
-        h = 48 if two else 26
+        h = 24
         f_num = self.f(SANS_B, SZ_BODY)
-        f_lab = self.f(SANS, SZ_BODY)
+        f_lab = self.f(SANS_B, SZ_BODY)
         for i, (num, lab) in enumerate(STATS):
             x = MX + i * (cell_w + GAP)
             box(d, x, self.y, cell_w, h)
-            if two:
-                d.text((x + (cell_w - d.textlength(num, font=f_num)) / 2,
-                        self.y + 3), num, font=f_num, fill=NAVY)
-                d.text((x + (cell_w - d.textlength(lab, font=f_lab)) / 2,
-                        self.y + 24), lab, font=f_lab, fill=GREY)
-            else:
-                txt = num + " " + lab
-                d.text((x + (cell_w - d.textlength(txt, font=f_num)) / 2,
-                        self.y + 3), txt, font=f_num, fill=INK)
+            tw = (d.textlength(num + " ", font=f_num)
+                  + d.textlength(lab, font=f_lab))
+            tx = x + (cell_w - tw) / 2
+            d.text((tx, self.y + 3), num, font=f_num, fill=NAVY)
+            d.text((tx + d.textlength(num + " ", font=f_num), self.y + 3),
+                   lab, font=f_lab, fill=GREY)
         self.note("stat strip", h)
         self.y += h + SEC
 
@@ -495,6 +495,30 @@ class Layout:
             return 0
         fnt = self.f(SANS_B, SZ_BODY)
         return len(wrap(d, txt, fnt, w)) * LD[SZ_BODY] + 4
+
+    def one_line(self, d, text, fnt, max_w):
+        """First wrapped line of text, with an ellipsis if truncated.
+
+        Drops whole words from the end until line + ellipsis fits,
+        then drops any trailing function word ("an", "and", "was",
+        "to" ...) so the teaser never ends mid-phrase.
+        """
+        lines = wrap(d, text, fnt, max_w)
+        if not lines:
+            return ""
+        if len(lines) == 1:
+            return lines[0]
+        first = lines[0]
+        while (first and d.textlength(first + "\u2026", font=fnt) > max_w):
+            first = first.rsplit(" ", 1)[0] if " " in first else ""
+        stop = {"a", "an", "the", "to", "and", "was", "were", "is",
+                "are", "up", "of", "in", "on", "at", "by", "for",
+                "with", "as", "after", "over", "from", "into", "be",
+                "been", "has", "have", "had", "will", "would", "not",
+                "than", "then", "so", "but", "or", "if", "when"}
+        while " " in first and first.rsplit(" ", 1)[1].lower() in stop:
+            first = first.rsplit(" ", 1)[0]
+        return (first + "\u2026") if first else "\u2026"
 
     def lead(self, story):
         d = self.d
@@ -588,8 +612,8 @@ class Layout:
         show_kick = self.cfg["med_kicker"]
         f_head = self.f(SERIF_B, SZ_BODY)
         f_sum = self.f(SANS, SZ_BODY)
-        # measure each row from real wraps; each row is as tall as its
-        # tallest story (grid stays aligned)
+        # Summaries are capped at ONE line (first wrapped line +
+        # ellipsis). Each row is as tall as its tallest story.
         nrows = (len(stories) + 2) // 3
         row_h = []
         for r in range(nrows):
@@ -598,17 +622,13 @@ class Layout:
                 tag, asset, kicker, headl, summ, meta, lon, lat = s
                 tw = cell_w - 2 * PAD
                 hl = wrap(d, headl, f_head, tw)
-                sl = wrap(d, summ, f_sum, tw)
-                ml = wrap(d, meta, f_sum, tw)
                 th = (((band + 6) if band else 0)
                       + (self.kicker_h(
                             d, 1 if self.cfg["show_map"] else None,
                             kicker, tw)
                          if show_kick else 0)
                       + len(hl) * LD[SZ_BODY] + 4
-                      + len(sl) * LD_BODY
-                      + (4 + len(ml) * LD_BODY
-                         if self.cfg["show_meta"] else 0)
+                      + LD_BODY
                       + PAD)
                 hh = max(hh, th)
             row_h.append(hh)
@@ -633,64 +653,11 @@ class Layout:
                             wrap(d, headl, f_head, tw), f_head, INK,
                             LD[SZ_BODY])
             yy += 4
-            yy = text_block(d, (x + PAD, yy),
-                            wrap(d, summ, f_sum, tw), f_sum, GREY, LD_BODY)
-            if self.cfg["show_meta"]:
-                yy += 4
-                text_block(d, (x + PAD, yy), wrap(d, meta, f_sum, tw),
-                           f_sum, NAVY, LD_BODY)
+            d.text((x + PAD, yy),
+                   self.one_line(d, summ, f_sum, tw), font=f_sum, fill=GREY)
         self.note("medium x%d" % len(stories),
                   sum(row_h) + (len(row_h) - 1) * GAP)
         self.y += sum(row_h) + (len(row_h) - 1) * GAP + SEC
-
-    def briefs(self, tags):
-        d = self.d
-        if not tags:
-            return
-        items = [b for b in BRIEFS if b[0] in tags]
-        cell_w = (CW - GAP) / 2
-        f_head = self.f(SERIF_B, SZ_BODY)
-        f_sum = self.f(SANS, SZ_BODY)
-        # brief box: mini image left, headline + summary right
-        iw, ih = 72, 48
-        rows = (len(items) + 1) // 2
-        row_h = []
-        for r in range(rows):
-            hh = 0
-            for s in items[r * 2:(r + 1) * 2]:
-                tag, asset, kicker, headl, summ, meta, lon, lat = s
-                tw = cell_w - 2 * PAD - iw - 8
-                hl = wrap(d, headl, f_head, tw)
-                sl = wrap(d, summ, f_sum, tw)
-                th = (PAD + self.kicker_h(
-                    d, 1 if self.cfg["show_map"] else None, kicker, tw)
-                      + len(hl) * LD[SZ_BODY] + 4
-                      + len(sl) * LD_BODY + PAD)
-                hh = max(hh, th, ih + 2 * PAD)
-            row_h.append(hh)
-        for idx, s in enumerate(items):
-            r, c = divmod(idx, 2)
-            tag, asset, kicker, headl, summ, meta, lon, lat = s
-            num = self.next_no(tag, lon, lat)
-            x = MX + c * (cell_w + GAP)
-            yy0 = self.y + sum(row_h[:r]) + r * GAP
-            box(d, x, yy0, cell_w, row_h[r])
-            self.img.paste(art(asset, iw, ih),
-                           (int(x) + PAD, int(yy0) + PAD))
-            tx = x + PAD + iw + 8
-            tw = cell_w - 2 * PAD - iw - 8
-            yy = yy0 + PAD
-            yy = self.kicker_line(d, tx, yy,
-                                  num if self.cfg["show_map"] else None,
-                                  kicker, tw)
-            yy += 4
-            yy = text_block(d, (tx, yy), wrap(d, headl, f_head, tw),
-                            f_head, INK, LD[SZ_BODY])
-            yy += 4
-            text_block(d, (tx, yy), wrap(d, summ, f_sum, tw), f_sum,
-                       GREY, LD_BODY)
-        self.note("briefs x%d" % len(items), sum(row_h) + (rows - 1) * GAP)
-        self.y += sum(row_h) + (rows - 1) * GAP + SEC
 
     def section_head(self, text):
         d = self.d
@@ -700,6 +667,48 @@ class Layout:
         d.line([(MX + lw + 12, self.y + 11), (W - MX, self.y + 11)],
                fill=NAVY, width=2)
         self.y += LD[SZ_BODY] + 4
+
+    def briefs(self, tags):
+        """Headline-only briefs: 3-column open grid, mini illustration
+        (32px) + headline at 16px. No boxes, no summary, no kicker --
+        a row costs ~34px (2 headline lines at 17px leading). A
+        hairline between rows keeps the grid legible."""
+        d = self.d
+        if not tags:
+            return
+        items = [b for b in BRIEFS if b[0] in tags]
+        cell_w = (CW - 2 * GAP) / 3
+        mini = 32
+        gap_v = 6
+        f_head = self.f(SERIF_B, SZ_BRIEF)
+        rows = (len(items) + 2) // 3
+        row_h = []
+        for r in range(rows):
+            hh = mini
+            for s in items[r * 3:(r + 1) * 3]:
+                tw = cell_w - mini - 8
+                hl = wrap(d, s[3], f_head, tw)
+                hh = max(hh, len(hl) * LD_BRIEF)
+            row_h.append(hh)
+        for idx, s in enumerate(items):
+            r, c = divmod(idx, 3)
+            tag, asset, kicker, headl, summ, meta, lon, lat = s
+            self.next_no(tag, lon, lat)
+            x = MX + c * (cell_w + GAP)
+            yy0 = self.y + sum(row_h[:r]) + r * gap_v
+            self.img.paste(art(asset, mini, mini),
+                           (int(x), int(yy0 + (row_h[r] - mini) // 2)))
+            tx = x + mini + 8
+            tw = cell_w - mini - 8
+            text_block(d, (tx, yy0), wrap(d, headl, f_head, tw),
+                       f_head, INK, LD_BRIEF)
+        # hairlines between rows, drawn in the vertical gaps
+        for r in range(rows - 1):
+            yy = self.y + sum(row_h[:r + 1]) + r * gap_v + gap_v // 2
+            d.line([(MX, yy), (W - MX, yy)], fill=HAIR, width=1)
+        self.note("briefs x%d" % len(items),
+                  sum(row_h) + (rows - 1) * gap_v)
+        self.y += sum(row_h) + (rows - 1) * gap_v + SEC
 
     # -- map --------------------------------------------------------
     def world_map(self):
@@ -763,12 +772,12 @@ class Layout:
                          else FOOTER_LINES):
             fnt2 = f_b if col is RED else fnt
             lines.extend((ln, col, fnt2)
-                         for ln in wrap(d, txt, fnt2, CW - 2 * PAD))
-        h = PAD + len(lines) * LD_BODY + PAD
+                         for ln in wrap(d, txt, fnt2, CW - 2 * FPAD))
+        h = FPAD + len(lines) * LD_BODY + FPAD
         d.rectangle([MX, self.y, W - MX, self.y + h], outline=RED, width=2)
-        yy = self.y + PAD
+        yy = self.y + FPAD
         for ln, col, fnt2 in lines:
-            d.text((MX + PAD, yy), ln, font=fnt2, fill=col)
+            d.text((MX + FPAD, yy), ln, font=fnt2, fill=col)
             yy += LD_BODY
         self.note("footer (%d lines)" % len(lines), h)
         self.y += h
@@ -789,17 +798,31 @@ class Layout:
         self.d = ImageDraw.Draw(self.img)
 
 
+def geo_regions(stories):
+    """Geographic regions covered by the shown stories, from kickers.
+
+    Middle East, Asia, Europe, Americas, Africa -- GLOBAL adds none.
+    """
+    regions = set()
+    for s in stories:
+        first = s[2].split(" \u00b7 ")[0]
+        if "AMERICA" in first:
+            regions.add("Americas")
+        if "EUROPE" in first:
+            regions.add("Europe")
+        if first in ("MIDDLE EAST", "ASIA", "AFRICA"):
+            regions.add(first.title())
+    return regions
+
+
 def build(cfg):
     L = Layout(cfg)
     med = [s for s in MEDIUM if s[0] in cfg["medium"]]
+    brief_items = [b for b in BRIEFS if b[0] in cfg["briefs"]]
     shown_tags = ["L1", "L2", "L3"] + [s[0] for s in med] + cfg["briefs"]
-    n_regions = len({r for s in [LEAD] + SECONDARY + med
-                     for r in [s[2].split(" \u00b7 ")[0]]} |
-                    {b[2].split(" \u00b7 ")[0]
-                     for b in BRIEFS if b[0] in cfg["briefs"]})
+    n_regions = len(geo_regions([LEAD] + SECONDARY + med + brief_items))
     L.banner(len(shown_tags), n_regions)
     L.masthead()
-    L.region_bar()
     L.stat_strip()
     L.lead(LEAD)
     L.secondary(SECONDARY)
@@ -819,6 +842,8 @@ def build(cfg):
           % ("TOTAL incl. margins", total, L.y, H - BOT))
     print("stories shown: %d (%s)"
           % (len(shown_tags), ", ".join(shown_tags)))
+    print("briefs cut: %s"
+          % ", ".join(b[0] for b in BRIEFS if b[0] not in cfg["briefs"]))
     if L.y > H - BOT:
         raise SystemExit("OVERFLOW by %dpx -- cut more (see CUT_ORDER)"
                          % (L.y - (H - BOT)))
